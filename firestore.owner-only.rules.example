@@ -1,0 +1,24 @@
+// 進階選用：個人專用。先在 Firebase Authentication > Users 找到自己的 UID。
+// 先將 PASTE_YOUR_UID 改成你自己的 Firebase Auth UID 才可以發布。
+// 此檔不會自動部署；請在 Firestore Console > Rules 貼上並 Publish。
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{userId}/appData/{docId} {
+      function isOwner() {
+        return request.auth != null
+          && request.auth.uid == userId
+          && request.auth.uid == 'PASTE_YOUR_UID'
+          && docId == 'calculator';
+      }
+      allow read: if isOwner();
+      allow create, update: if isOwner()
+        && request.resource.data.keys().hasOnly(['payload', 'updatedAt'])
+        && request.resource.data.payload is map
+        && request.resource.data.payload.transactions is list
+        && request.resource.data.payload.transactions.size() <= 10000;
+      allow delete: if isOwner();
+    }
+  }
+}

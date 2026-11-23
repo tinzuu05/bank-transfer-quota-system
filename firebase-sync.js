@@ -3,7 +3,7 @@
  * 設計：未設定 Firebase 時，主計算器保持完全可用；登入後資料依 UID 隔離。
  * 同步採單一文件（users/{uid}/appData/calculator），以最後一筆成功提交為準。
  * 限制：同時在兩個裝置離線修改可能需要手動解決衝突；請定期備份 JSON。
- * 修改者：OpenAI｜日期：2026-11-23｜頁面：index/login/logout
+ * 修改者：OpenAI｜日期：2026-11-23｜頁面：index/login/logout（v5.1 登入診斷）
  */
 
 const CONFIG = window.BANK_FIREBASE_CONFIG || {};
@@ -14,6 +14,10 @@ const accountLink = document.getElementById('accountLink');
 const signInButton = document.getElementById('googleSignIn');
 const signOutButton = document.getElementById('googleSignOut');
 const authMessage = document.getElementById('authMessage');
+const authDebugReport = document.getElementById('authDebugReport');
+const copyAuthDebug = document.getElementById('copyAuthDebug');
+let latestAuthErrorCode = '';
+let latestAuthCheck = '尚未檢查';
 const uploadButton = document.getElementById('cloudUpload');
 const downloadButton = document.getElementById('cloudDownload');
 const SYNC_PENDING = 'bank-quota-cloud-unsynced';
@@ -38,12 +42,41 @@ function status(message, cls = '') {
   if (indicator) indicator.className = `status-dot ${cls}`;
 }
 
-function configured() {
-  return ['apiKey', 'authDomain', 'projectId', 'appId'].every((key) => {
+/**
+ * 先檢查公開的 Web 設定，而非在設定不完整時直接呼叫 OAuth。
+ * 不輸出 apiKey 原文，避免使用者誤將組態或其他資料貼到公開問題單。
+ */
+function validateConfig() {
+  for (const key of ['apiKey', 'authDomain', 'projectId', 'appId']) {
     const value = CONFIG[key];
-    return typeof value === 'string' && value.trim() && !value.includes('請填') && !value.includes('YOUR_');
-  });
+    if (typeof value !== 'string' || !value.trim()) return `firebase-config.js 尚未填入 ${key}`;
+    if (/^(你的|請填|YOUR_|REPLACE_|TODO|<|\{)/i.test(value.trim()) || value.includes('你的')) {
+      return `firebase-config.js 的 ${key} 仍是範例文字`;
+    }
+  }
+  if (!CONFIG.authDomain.includes('.') || CONFIG.authDomain.includes('://') || CONFIG.authDomain.includes('/')) {
+    return 'authDomain 格式錯誤：只能填入網域，不要包含 https:// 或路徑';
+  }
+  if (/\s/.test(CONFIG.projectId) || /\s/.test(CONFIG.apiKey)) {
+    return 'Firebase 設定值包含空白，請重新從 Firebase Console 複製';
+  }
+  return '';
 }
+
+/** 回報只含公開站台資訊、設定檢查結果及 Firebase 錯誤代碼的診斷文字。 */
+function updateAuthDiagnostics() {
+  if (!authDebugReport) return;
+  authDebugReport.textContent = [
+    `站台網域：${location.hostname || '(本機檔案)'}`,
+    `傳輸協定：${location.protocol}`,
+    `Firebase Web 設定：${latestAuthCheck}`,
+    `Firebase 授權網域待確認：${location.hostname || '(尚未部署)'}`,
+    `Google 登入：請確認 Authentication > Sign-in method > Google 已啟用`,
+    `最近錯誤代碼：${latestAuthErrorCode || '無'}`,
+    '本診斷不包含 API Key、登入 Token 或銀行資料。'
+  ].join('\n');
+}
+
 
 function waitForQuotaApp() {
   if (window.BankQuotaStore) return Promise.resolve();
@@ -52,14 +85,19 @@ function waitForQuotaApp() {
 
 /** 初始化 Google 登入，絕不在設定缺失時嘗試網路連線。 */
 async function setup() {
-  if (!configured()) {
-    status('尚未設定 Firebase；交易紀錄儲存在本機。', 'warn');
+  const configIssue = validateConfig();
+  latestAuthCheck = configIssue || '已填寫必要欄位（尚未驗證是否正確）';
+  updateAuthDiagnostics();
+  if (configIssue) {
+    status(`${configIssue}；請到 GitHub 修改 firebase-config.js 後重新部署。`, 'warn');
     if (signInButton) signInButton.disabled = true;
     if (signOutButton) signOutButton.disabled = true;
     return;
   }
   if (location.protocol === 'file:') {
     status('Google 登入需要 HTTPS 或 localhost。請部署至 GitHub Pages；本機 HTML 仍可離線試算。', 'warn');
+    latestAuthErrorCode = 'insecure-context';
+    updateAuthDiagnostics();
     if (signInButton) signInButton.disabled = true;
     if (signOutButton) signOutButton.disabled = true;
     return;
@@ -75,11 +113,17 @@ async function setup() {
     const firebaseApp = appSdk.initializeApp(CONFIG);
     firebaseAuth = authSdk.getAuth(firebaseApp);
     firebaseDb = firestoreSdk.getFirestore(firebaseApp);
+    if (signInButton) signInButton.disabled = false;
+    if (signOutButton) signOutButton.disabled = false;
+    latestAuthCheck = 'Firebase SDK 初始化成功';
+    updateAuthDiagnostics();
     authSdk.onAuthStateChanged(firebaseAuth, async (user) => {
       try { await handleUserChange(user); } catch (error) { status(`連線異常：${friendlyError(error)}`, 'warn'); }
     });
   } catch (error) {
-    status(`Firebase 尚未連線：${friendlyError(error)}。可先使用離線模式。`, 'warn');
+    latestAuthErrorCode = error?.code || error?.name || 'sdk-load-failed';
+    updateAuthDiagnostics();
+    status(`Firebase 初始化失敗 [${latestAuthErrorCode}]：${friendlyError(error)}。可先使用離線模式。`, 'warn');
   }
 }
 
@@ -87,6 +131,12 @@ function friendlyError(error) {
   if (error?.code === 'auth/unauthorized-domain') return '請將 GitHub Pages 的網域加入 Firebase 授權網域';
   if (error?.code === 'auth/popup-blocked') return '瀏覽器封鎖 Google 登入視窗，請允許彈出視窗';
   if (error?.code === 'auth/popup-closed-by-user') return '你已關閉登入視窗';
+  if (error?.code === 'auth/invalid-api-key' || error?.code === 'auth/api-key-not-valid.-please-pass-a-valid-api-key') return 'Firebase Web API Key 無效，請從 Firebase Console 的 Web App 設定重新複製';
+  if (error?.code === 'auth/operation-not-allowed') return 'Firebase Authentication 尚未啟用 Google 登入方式';
+  if (error?.code === 'auth/configuration-not-found') return '此 Firebase 專案尚未完成 Authentication 設定，請確認 Google 供應商已啟用';
+  if (error?.code === 'auth/network-request-failed') return '網路連線失敗，請檢查網路或瀏覽器阻擋的請求';
+  if (error?.code === 'auth/cancelled-popup-request') return '登入視窗請求被取消，請稍後重新點擊一次';
+  if (error?.code === 'auth/invalid-app-credential') return 'Google 驗證憑證無效，請檢查 Web App 設定和已授權網域';
   if (error?.code === 'permission-denied') return 'Firestore 安全規則拒絕存取，請部署 firestore.rules';
   return error?.message || '未知錯誤';
 }
@@ -204,7 +254,9 @@ if (signInButton) signInButton.addEventListener('click', async () => {
   try {
     await authSdk.signInWithPopup(firebaseAuth, new authSdk.GoogleAuthProvider());
   } catch (error) {
-    status(`登入失敗：${friendlyError(error)}`, 'warn');
+    latestAuthErrorCode = error?.code || error?.name || 'unknown';
+    updateAuthDiagnostics();
+    status(`登入失敗 [${latestAuthErrorCode}]：${friendlyError(error)}`, 'warn');
   } finally { signInButton.disabled = false; }
 });
 
@@ -246,6 +298,16 @@ if (downloadButton) downloadButton.addEventListener('click', async () => {
     if (!unsubscribe) listenToChanges();
     status('雲端資料下載成功。', 'online');
   } catch (error) { status(`下載失敗：${friendlyError(error)}`, 'warn'); }
+});
+
+if (copyAuthDebug) copyAuthDebug.addEventListener('click', async () => {
+  if (!authDebugReport) return;
+  try {
+    await navigator.clipboard.writeText(authDebugReport.textContent);
+    copyAuthDebug.textContent = '診斷資訊已複製';
+  } catch {
+    copyAuthDebug.textContent = '複製失敗，請手動選取上方文字';
+  }
 });
 
 window.addEventListener('online', () => {

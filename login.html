@@ -19,8 +19,13 @@
     <section class="card" aria-labelledby="loginTitle"><h2 id="loginTitle">歡迎使用</h2>
       <p class="secondary">本工具不會要求銀行密碼或連接銀行帳戶。登入僅用來同步你手動輸入的資料。</p>
       <p id="authMessage" role="status">正在確認登入狀態…</p>
-      <div class="auth-actions"><button class="btn primary" id="googleSignIn" type="button">使用 Google 帳號登入</button><a class="btn secondary-btn" href="./index.html">先使用本機模式</a></div>
-      <p class="secondary small">請先設定 Firebase 並開啟 Google 登入。登入必須在 HTTPS 或 localhost 網址進行，直接開啟 file:// 網頁不支援 Google 登入。</p>
+      <div class="auth-actions"><button class="btn primary" id="googleSignIn" type="button" disabled>使用 Google 帳號登入</button><a class="btn secondary-btn" href="./index.html">先使用本機模式</a></div>
+      <details class="auth-debug">
+        <summary>無法登入？查看不含金鑰的診斷資訊</summary>
+        <pre id="authDebugReport">正在檢查網站設定…</pre>
+        <button class="btn secondary-btn" id="copyAuthDebug" type="button">複製診斷資訊</button>
+      </details>
+      <p class="secondary small">請先在 Firebase 啟用 Google 登入，並在 Authorized domains 加入 GitHub Pages 網域。登入需 HTTPS 或 localhost，直接開啟 file:// 不支援。</p>
     </section>
   </main>
 </body>

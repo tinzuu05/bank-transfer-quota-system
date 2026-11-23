@@ -1,5 +1,5 @@
 /** PWA: cache static local assets; never cache credentials or Firebase cloud requests. */
-const CACHE_NAME = 'three-bank-quota-v5-20261123';
+const CACHE_NAME = 'three-bank-quota-v5-1-20261123';
 const ASSETS = [
   './', './index.html', './login.html', './logout.html', './styles.css',
   './app.js', './firebase-sync.js', './manifest.webmanifest',
