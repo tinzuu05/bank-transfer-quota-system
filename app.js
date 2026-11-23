@@ -1,9 +1,3 @@
-/**
- * 三銀行轉帳額度計算器 v5.0
- * 用途：三家銀行各自記錄交易，試算各自提款／轉帳限額與跨行優惠次數。
- * 限制：銀行產品、約定及核准額度存在個別差異；不得用作實際轉帳授權依據。
- * 修改者：OpenAI｜日期：2026-11-23｜相關頁面：index.html
- */
 (() => {
   'use strict';
 
@@ -132,7 +126,7 @@
     };
   }
 
-  /** v2 合庫舊紀錄映射到合庫分頁；無法辨識的舊分類標示待確認。 */
+  /**  合庫舊紀錄映射到合庫分頁；無法辨識的舊分類標示待確認。 */
   function migrateLegacy() {
     let old;
     try { old = JSON.parse(localStorage.getItem(LEGACY_KEY) || 'null'); } catch { return null; }
@@ -173,7 +167,6 @@
       for (const key of Object.keys(target.flags)) target.flags[key] = Boolean(saved.flags?.[key]);
       for (const key of Object.keys(target.singles)) {
         if (validInt(saved.singles?.[key], true)) {
-          // v4 海外單筆額度曾設定過高；第三類帳戶保守恢復官方單筆上限。
           const entered = Number(saved.singles[key]);
           target.singles[key] = key === 'atmOverseas' && ['tcb', 'taishin'].includes(bankId)
             ? Math.min(20000, entered) : entered;
