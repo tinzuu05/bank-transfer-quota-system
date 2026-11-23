@@ -3,7 +3,6 @@
  * 設計：未設定 Firebase 時，主計算器保持完全可用；登入後資料依 UID 隔離。
  * 同步採單一文件（users/{uid}/appData/calculator），以最後一筆成功提交為準。
  * 限制：同時在兩個裝置離線修改可能需要手動解決衝突；請定期備份 JSON。
- * 修改者：OpenAI｜日期：2026-11-23｜頁面：index/login/logout（v6 安全部署 / App Check / 登入診斷）
  */
 
 const CONFIG = window.BANK_FIREBASE_CONFIG || {};
