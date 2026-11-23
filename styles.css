@@ -19,3 +19,6 @@
 .auth-debug summary{cursor:pointer;color:#285b89;font-weight:700;line-height:1.6}
 .auth-debug pre{font-size:11px;white-space:pre-wrap;word-break:break-word;line-height:1.9;color:#4c647b;margin:14px 0 12px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
 .auth-debug .btn{min-height:36px;padding:8px 12px}
+
+/* v6 Firebase App Check status; readable on mobile login page. */
+.appcheck-indicator{border:1px solid #c8dfec;background:#f1f8ff;color:#246183;border-radius:9px;padding:9px 12px;font-size:12px;line-height:1.6}

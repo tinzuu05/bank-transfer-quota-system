@@ -1,17 +1,29 @@
+// 只允許指定 Firebase Authentication UID 存取此工具的唯一資料文件。
+// 重要：到 Firebase Authentication > Users 複製自己的 UID，將下方佔位字替換後，
+// 再於 Firestore Database > Rules 貼上並 Publish。
+// 在替換前此規則預設拒絕所有使用者（安全的 fail-closed 狀態）。
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // 僅允許 Google 登入使用者存取本人資料，拒絕所有其他路徑。
     match /users/{userId}/appData/{docId} {
-      allow read: if request.auth != null && request.auth.uid == userId && docId == 'calculator';
-      allow create, update: if request.auth != null
-        && request.auth.uid == userId
-        && docId == 'calculator'
-        && request.resource.data.keys().hasOnly(['payload', 'updatedAt'])
-        && request.resource.data.payload is map
-        && request.resource.data.payload.transactions is list
-        && request.resource.data.payload.transactions.size() <= 10000;
-      allow delete: if request.auth != null && request.auth.uid == userId && docId == 'calculator';
+      function isSoleOwner() {
+        return request.auth != null
+          && request.auth.uid == 'REPLACE_WITH_YOUR_FIREBASE_AUTH_UID'
+          && request.auth.uid == userId
+          && docId == 'calculator';
+      }
+      function validPayload() {
+        return request.resource.data.keys().hasOnly(['payload', 'updatedAt'])
+          && request.resource.data.keys().hasAll(['payload', 'updatedAt'])
+          && request.resource.data.updatedAt is timestamp
+          && request.resource.data.payload is map
+          && request.resource.data.payload.transactions is list
+          && request.resource.data.payload.transactions.size() <= 10000;
+      }
+      allow get: if isSoleOwner();
+      allow list: if false;
+      allow create, update: if isSoleOwner() && validPayload();
+      allow delete: if isSoleOwner();
     }
   }
 }

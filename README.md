@@ -1,136 +1,140 @@
-# 三銀行額度管理 PWA · v5.1
+# 三銀行額度管理 PWA v6.0 — GitHub Secrets / Google 登入 / App Check 安全部署
 
-對應你的三個帳戶：**合庫第三類數位帳戶**、**中國信託臨櫃一般帳戶**、**台新 Richart 第三類數位帳戶**。
+> 此專案由 v5.1 更新。**不連銀行、不需銀行密碼**，只儲存你手動輸入的額度與交易紀錄。合庫第三類、中信一般戶、台新 Richart 第三類三個 Tab、提款與轉帳限額、國內／國外 ATM 使用額度、免費跨轉／跨提、JSON/CSV 與離線功能均保留。
 
-- 交易單筆、每日／每月限額獨立設定與檢查；每月跨轉／跨提優惠次數獨立計算。
-- 國內與國外 ATM 提款在畫面分為兩個區塊，各自顯示當日與當月累計，但共用銀行每日提款額度；沒有額外創造海外提款上限。提醒合庫的海外提款每日次數控管。
-- 備份／還原 JSON、CSV、離線 localStorage；可選用 Google 登入 + Firestore 跨裝置同步。
-- 安裝為手機 PWA；響應式版面，無前端框架、無建置步驟。
+## 先理解：這是「不提交至 Git」而非「瀏覽器完全看不見」
 
-## 一、先在本機使用
+- `FIREBASE_WEB_CONFIG_JSON` 和 `FIREBASE_APPCHECK_SITE_KEY` 儲存在 **GitHub Repository Secrets**，**不會提交到 GitHub 原始碼或 Commit**。
+- GitHub Actions 在執行時產生 `dist/firebase-config.js` 並把它部署到 GitHub Pages。**網站使用者仍可取得這個前端 Firebase Web Config 和 reCAPTCHA Enterprise *site key***，因為瀏覽器必須使用它們。這兩項不是後端私人金鑰。
+- 需要真正保密的東西（Google 密碼、Firebase Admin SDK service account JSON、Private key、銀行資料備份）**絕不應上傳此 Repository 或 Secrets 以供前端產出**。
+- 真正保護雲端交易資料的是 **Firestore UID 白名單規則**、Firebase Authentication 與 **App Check**。App Check 也不是取代 Rules 的權限系統。
+- **GitHub Pages 的網站本身可以公開訪問**，即使只有你能存取 Firestore。未登入者仍可使用本機模式，不代表能讀你的雲端資料。
 
-1. 解壓縮 ZIP，直接打開 `index.html`，就能**離線使用計算器**（不需要 Firebase）。
-2. 資料存在這個瀏覽器的 `localStorage`。如果要保留先前 v3 的資料，建議先在 v3 匯出 JSON，使用新版「還原 JSON」匯入（即使換網址、資料夾，也不會遺失）。新版沿用 v3 同一儲存 key，但 `file://` 路徑或瀏覽器不同仍可能造成無法直接讀取。
-3. **直接打開 file:// 不能啟用 Google OAuth／Service Worker／PWA 安裝**，必須先使用 HTTPS（如 GitHub Pages）或 localhost。
+## 一、部署前備份與清理舊 GitHub 檔案
 
-## 二、建立 Firebase 專案（需你自己的 Google 帳號）
+1. 在目前 v5.1 網頁按「備份全部 JSON」，把備份檔保存在你的私人裝置，**不要上傳到 GitHub**。
+2. 在原 GitHub Repo 刪除原本有實際設定的 `firebase-config.js`，因為新版檔案是 **Actions 部署時才會產生**。刪除當前檔案 **不等於刪除 Git 歷史紀錄**；舊設定若已提交，仍可能在歷史中看見。Firebase Web API key 不是授權密鑰，若擔心濫用，先查 API 限制及用量、必要時依 Google Cloud 指引輪替（輪替之前確認不會使現有網站中斷）。
+3. 用本 ZIP **資料夾內的所有檔案**取代 v5.1 的原始碼（不要把外層資料夾再包進 GitHub Repository）。上傳時請確認隱藏路徑 `.github/workflows/deploy-pages.yml` 也有提交。
+4. 專案根目錄不應再有含真實值的 `firebase-config.js`。ZIP 裡只附 `firebase-config.example.js`（空白範例），`.gitignore` 會阻止日後誤提交真實設定。但 **`.gitignore` 不會自動解除已追蹤的舊檔案**，一定要手動從 Git 移除。
+5. 不要上傳 `dist/`、`*.json` 個人備份、`.env`、任何服務帳戶私鑰。GitHub **Commit** 前檢查檔案清單。
 
-登入 https://console.firebase.google.com/ ：
+## 二、準備 Firebase Google Authentication
 
-1. 選 **新增專案**，自訂專案名稱；這是你自己的雲端專案，程式碼無法代替你同意 Google 服務條款。
-2. 點 **新增應用程式 → 網頁**，註冊 `three-bank-quota`，複製網頁應用程式設定（`firebaseConfig`）。
-3. 編輯 `firebase-config.js`，貼入對應 `apiKey`、`authDomain`、`projectId`、`appId`、`messagingSenderId` 的值。這些是 Firebase Web app 的公開組態，不是密碼。**不要放服務帳號的私人金鑰、銀行密碼、Google 登入密碼或任何私密憑證。**
-4. 左欄 **Authentication → Sign-in method → Google → 啟用**，設定必要的支援信箱並儲存。
-5. **Authentication → Settings → Authorized domains** 加入 `你的GitHub帳號.github.io`（不包含 `https://` 或 `/repo`），若使用自訂網域也加入該網域。`localhost` 需要自行新增，部分新專案不預設包含它。
-6. 左欄 **Firestore Database → 建立資料庫**，選 Standard edition；選擇適當的資料庫區域，並在 **Rules** 貼入 `firestore.rules` 全部內容，按發布。**不要用 `allow read, write: if true`。**
-7. Firebase Console 可於 Authentication 的 Users 頁確認 Google 登入是否成功；Firestore 路徑為 `users/{uid}/appData/calculator`。使用者只能存取自己的資料。
+1. 開啟 https://console.firebase.google.com/ ，選擇你已經建立的 Firebase 專案。Firebase **Project settings → General → Your apps → Web app → Config** 取得 **同一個 Web App** 的設定物件（不是 Admin service account）。
+2. 到 **Build → Authentication → Sign-in method → Google**，確認 `Enabled` 且有支援電子郵件，儲存。
+3. 到 **Authentication → Settings → Authorized domains**，新增 `你的Github帳號.github.io`；**不要加 `https://` 或 Repo 路徑**。例如網站 `https://zoe.github.io/three-bank-quota/`，只填 `zoe.github.io`。
+4. 不要把 `authDomain` 改成 GitHub Pages 網域。對此 GitHub Pages 靜態網站，本專案優先用 `signInWithPopup()`，避免 Firebase `signInWithRedirect()` 在 Safari / Chrome 的第三方儲存空間相容性問題。瀏覽器若禁用彈出視窗，需要允許彈出；iPhone PWA 若遇到登入問題，請先在 Safari 的一般分頁登入，再回到 PWA（不同瀏覽器容器的登入狀態**不保證**自動共用）。
+5. 你先前提供的設定中，`appId` 中的數字與 `messagingSenderId` 不相同。**不要根據其中一個手工改另一個**，應從**同一個** Firebase Web App 複製整組設定；新版部署腳本發現不一致會停止部署。
 
-如果額度不大，通常可以先使用 Firebase 免費額度，但依實際用量／服務版本為準；有可能需要同意相應計費服務。Google 登入與 Firestore 需要網路。
+## 三、建立 reCAPTCHA Enterprise Web Site Key / Firebase App Check
 
-## 三、部署到 GitHub Pages（無建置步驟）
+1. 選對同一 Google Cloud Project，打開 https://console.cloud.google.com/security/recaptcha ，或在 Google Cloud 的 **Google Cloud Fraud Defense → reCAPTCHA** 進入管理頁面。
+2. 如果提示，啟用 reCAPTCHA Enterprise API。建立 Web 網站金鑰，選用**評分型（Score-based）**，不要勾選 `Use checkbox challenge`。
+3. 允許網域填 `你的GitHub帳號.github.io`，若也有正式自訂網域再加入。**不要停用網域驗證、不要將 localhost 加入正式金鑰**。將產生的 **Site Key** 留作下一步 Secret（這個 Site Key 本質上也是公開識別值，不是 API Secret）。
+4. 回到 Firebase Console → **Security → App Check → Apps** → 找到你的 Web App → Register → **reCAPTCHA Enterprise**，貼上相同的 Site Key，完成註冊。預設 TTL 一小時可先維持。
+5. **先不要按 Enforce（強制驗證）**。等網站上線、登入與 Firestore 同步測試成功、App Check Metrics 顯示正常（Verified）後，再到 **App Check → APIs → Cloud Firestore → Enforce**；先只對 Firestore 開啟，確認可用後再考慮 Auth。若過早 Enforce，舊網站／手機快取或設定錯誤可能全面無法同步。啟用後可能需約 15 分鐘才完全生效。
+6. App Check 會產生 reCAPTCHA 評估用量；官方目前有免費額度，超出或啟用較高級服務可能涉及費用。維持免費方案前，先確認 Firebase/Google Cloud 的計費畫面和配額。不要因畫面提示而不經確認就升級 Blaze。
 
-1. 在你的 GitHub 帳戶新增一個 repo，例：`three-bank-quota`。**建議使用 private repo** 儲存原始碼；若透過 GitHub Pages 對外發布，網站本身仍可能是公開可訪問的。請勿把銀行帳號、交易備份檔或任何秘密放入 repo。
-2. 將此資料夾的所有檔案（包含 `index.html`、`app.js`、`styles.css`、`firebase-config.js`、`firebase-sync.js`、`service-worker.js`、`manifest.webmanifest`、`assets/`、`.nojekyll` 等）放到 repo **根目錄**。
-3. GitHub → Repository **Settings → Pages → Build and deployment → Deploy from a branch** → Branch `main` / `/(root)` → Save。
-4. 等 GitHub Pages 顯示網站 URL（約為 `https://你的帳號.github.io/three-bank-quota/`），用這個網址開啟網站。
-5. 回 Firebase Authentication 確認 **Authorized domains** 已新增 `你的帳號.github.io`。網站右上點「Google 登入」→ 繼續登入。
+官方：
+- https://firebase.google.com/docs/app-check/web/recaptcha-enterprise-provider
+- https://firebase.google.com/docs/app-check/enable-enforcement
+- https://firebase.google.com/docs/app-check/recaptcha-keys
 
-### 不使用 Git 指令：透過 GitHub 網頁上傳
+## 四、設定 GitHub Repository Secrets（不用再貼 Firebase 值到原始碼）
 
-新增 repo 後選 **Add file → Upload files**，上傳解壓後的根目錄檔案並 Commit；建議確認 `assets` 子目錄與點檔 `.nojekyll` 均存在。
+1. 進入原本的 GitHub Repository → **Settings → Secrets and variables → Actions**。
+2. 點 **New repository secret**，Name: `FIREBASE_WEB_CONFIG_JSON`。Secret 貼上**你自己的 Firebase Web App config JSON 物件**；格式如下，注意每個值均為**同一個 Web App** 的真實值：
 
-### 本機在 localhost 測試
-
-在專案資料夾執行：
-
-```bash
-python3 -m http.server 8080
+```json
+{
+  "apiKey": "YOUR_WEB_API_KEY",
+  "authDomain": "YOUR_PROJECT_ID.firebaseapp.com",
+  "projectId": "YOUR_PROJECT_ID",
+  "appId": "1:YOUR_PROJECT_NUMBER:web:YOUR_APP_ID_SUFFIX",
+  "messagingSenderId": "YOUR_PROJECT_NUMBER"
+}
 ```
 
-瀏覽 `http://localhost:8080/`。使用 Google 登入前須在 Firebase 授權網域新增 `localhost`。
+> 切勿連同 `const firebaseConfig =`、```javascript 區塊標記或尾端分號一起貼入 Secret；Secret 必須是 **純 JSON**，不是 JavaScript 語法。以 Firebase Console 真實值代入，不要自行猜測。
 
-## 四、安裝到手機
+3. 再點 **New repository secret**，Name: `FIREBASE_APPCHECK_SITE_KEY`，Value 貼入第三階段建立的 reCAPTCHA Enterprise **Web Site Key**。
+4. GitHub 只應顯示這**兩個 Secret 名稱**，不會回顯已保存的內容。**不要在 Issues、Commit message、PR 或 README 貼入真實值。**
+5. `OWNER_UID` **不需要**放到前端設定。你的 UID 會放在 Firestore 規則（見下節）而非 JavaScript；UID 本身不是登入密碼。
 
-**iPhone / Safari**：使用 Safari 開啟 GitHub Pages 網站 → 分享 → **加入主畫面**。
+## 五、改用 GitHub Actions 部署 GitHub Pages
 
-**Android / Chrome**：開啟 GitHub Pages 網站 → 選單 → **安裝應用程式** 或 **加到主畫面**；若瀏覽器支援，也可以使用網頁內的「安裝到手機／桌面」。
+1. 確認根目錄有 `.github/workflows/deploy-pages.yml` 和 `scripts/build-site.mjs`，**不要**在根目錄提交真實 `firebase-config.js`。
+2. Repository → **Settings → Pages → Build and deployment → Source** 改選 **GitHub Actions**（不再選 `Deploy from a branch`）。
+3. 回 Repository → **Actions** → 選 **Build and deploy bank quota PWA** → **Run workflow** → `main` → **Run workflow**。若剛才推送到 `main`，也會自動觸發部署。
+4. 兩個 Job 應依序通過：`build` 及 `deploy`，GitHub Pages 網址格式 `https://你的帳號.github.io/你的Repo名稱/`。查看 `Actions` 的結果即可；**不要在 Actions Logs 印出 Secret**。
+5. 新版 build 腳本會在部署時檢查：缺少兩個 Secrets、Config JSON 格式錯誤、App ID 與 Sender ID 不一致、不是同一個 Firebase Project 等情況。若錯誤，它會**停止**部署並顯示哪項設定需修正，不會印出 Key 原文。
+6. 到 Repository 的 **Code** 分頁，應該看得到 `firebase-config.example.js`，**但看不到 `firebase-config.js`**；到 GitHub Pages 網頁，瀏覽器仍可載入 Actions 產出的 `firebase-config.js`，這是預期行為。
 
-> 正確名稱是 **PWA**（Progressive Web App），不是 `pwd`，也不是 `.apk` 或 `.ipa` 安裝檔。PWA 必須先部署到可使用的 HTTPS 網址。安裝後離線仍可記錄本機資料；登入與雲端同步需要連網。
+GitHub Actions 工作流程使用 `actions/configure-pages@v5`、`actions/upload-pages-artifact@v4`、`actions/deploy-pages@v4`。來源：https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages
 
-## 五、同步模式與資料安全
+## 六、UID 白名單：只讓你的 Google 帳號操作 Firestore
 
-- 首次登入如果雲端沒有資料，會將目前本機紀錄傳上 Firestore。
-- 雲端和本機**都已有不同資料**時，會詢問是否下載雲端資料；如果選擇保留本機，會暫停自動同步，讓你先備份後再按「上傳本機資料」。
-- 登入後新增／編輯／刪除交易會自動嘗試同步；跨裝置雲端更新可同步到當前已開啟裝置。
-- 離線可以繼續記錄在本機；恢復連線後嘗試上傳。如兩台裝置同時離線編輯，單文件的最後寫入可能發生衝突，**請不要把它當成銀行正式帳務系統**，並定期匯出 JSON。
-- 登出頁面會清除目前裝置上的本機交易資料，避免共享設備洩漏隱私。登出前應先確認雲端同步成功或匯出備份。
-- **FireStore 單文件上限**可能限制累積資料容量。當交易紀錄很大時請使用 JSON 備份、避免同時在多台裝置持續離線編輯。本工具不收集銀行密碼／卡號，建議備註欄不要輸入銀行帳號或敏感資料。
-- Firebase Web Config 可公開，但 **Firestore Rules 一定要正式部署**，否則可能無法同步或暴露資料。
+1. 進 Firebase Console → **Firestore Database**，確認已建立 `(default)` 資料庫，並先不要用 `allow read, write: if true` 這種測試規則。
+2. 第一次登入時**即使 Firestore 顯示 permission-denied 也正常**：你需要先成功 Google 登入，讓 Firebase Authentication 建立你的 User 紀錄。
+3. 到 Firebase Console → **Authentication → Users**，找到你的 Google 帳號，複製最右側的 **User UID**（不是 Email、不是 App ID、不是 Project ID）。
+4. 開啟 ZIP 內的 `firestore.rules`，將 `'REPLACE_WITH_YOUR_FIREBASE_AUTH_UID'` 替換成你自己的 UID（保留單引號）。
+5. 到 Firebase Console → **Firestore Database → Rules**，貼上**已替換 UID** 的全部規則，按 **Publish**。這是雲端正式規則，**GitHub Actions 不會幫你發布 Firestore Rules**。
+6. 切回網站重新登入並重新載入，從測試交易開始確認雲端同步。Firestore Data 應看到 `users / <你的 UID> / appData / calculator`，而不是所有人共用 `calculator`。
+7. 使用另一個 Google 帳號測試，應該**不能讀／寫**你的 Firestore 資料（可能可以在 Firebase Authentication 登入，但必須看到 `permission-denied` 或無存取權限）。
 
-## 六、三家銀行國外提款規則與假設（截至 2026-11-23）
+**注意：** 本專案 `firestore.rules` 在替換前是 **fail-closed**：寫死不可能符合的佔位 UID，所有人均無權讀寫。如果需要回復，請先確認自己登入的 UID，再修改同一個規則。這個規則只保護 Firestore，不會讓已在瀏覽器本機 `localStorage` 的資料自動消失。
 
-| 帳戶 | 國外提款單筆 | 國外提款每日 | 每月 |
-|---|---|---|---|
-| 合庫第三類 | 20,000 元（一般國際提款） | 與國內提款、一般轉帳共用每日 100,000 元 | 與一般提款、轉帳共用 200,000 元 |
-| 中信一般戶 | 國外 ATM 機台為準；暫以 120,000 元作試算上限 | 與國內 ATM 共用預設 120,000 元 | 一般戶無提款月上限；工具可自設每月預算 |
-| 台新 Richart 第三類 | 20,000 元（跨國提款）；還要符合當地 ATM 單筆限制 | 與國內 ATM 共用每日 100,000 元 | 未查到額外固定的提款月上限；工具可自設每月預算 |
+## 七、登入診斷與 PWA 安裝
 
-**重要：** 國內與國外 ATM 的每日提款額度共用，不是分開各一份。畫面分別列出國內／國外「當日已用／當月已用」，在兩個區塊下方統一顯示當日提款共用上限與剩餘額度。合庫第三類還須計入同日一般轉帳占用的共用額度；對中信與台新，海外個人月預算（如設定）不是官方提款限額。
+在 `https://你的帳號.github.io/你的Repo/login.html` 點 **使用 Google 帳號登入**：
 
-- 合庫官方國外提款頁明確說明：國內外合計每天 10 萬，當天國外提款第 3 次會停止國外提款服務，須解鎖。國外交易請先申請啟用。
-- 中信官方說明：一般金融卡國內外 ATM 每日預設共用 12 萬，一般帳戶提款無固定月限額；境外 ATM 單筆依當地機台。
-- 台新於 2025-09-23 生效的公告：第三類數位帳戶金融卡每筆 5 萬，每日 10 萬，自行 ATM 與他行合併計算。
-- 免費跨行轉帳次數是使用者的個人設定，不保證所有同類銀行帳戶都有相同資格；海外提款不扣除「國內免費跨提次數」，海外 ATM 另外收取費用。
+- `auth/unauthorized-domain`：Authentication → Authorized domains 加上 `你的帳號.github.io`（不是完整 URL）。
+- `auth/invalid-api-key` 或 `API_KEY_SERVICE_BLOCKED`：重複確認 `FIREBASE_WEB_CONFIG_JSON`，以及 Google Cloud Web API Key 的 Firebase API 限制，**不能限制掉 Authentication 必要 API**。
+- Actions `appId project number and messagingSenderId disagree`：你的兩個欄位不是同一個 Firebase Web App 設定，重新複製完整 Config。
+- `auth/operation-not-allowed`：Authentication → Google 啟用。
+- `auth/popup-blocked`：允許彈出視窗；手機先以 Safari / Chrome 一般分頁測試，再安裝 PWA。
+- App Check Token 失敗：檢查 reCAPTCHA Enterprise 的網域、Firebase App Check 註冊 Site Key、網路連線和瀏覽器防追蹤限制。
+- `permission-denied`：UID 白名單尚未發布，或 Firestore App Check 已 Enforce 但裝置沒有有效 Token。
 
-銀行官方來源：
-- 合庫國外提款：https://www.tcb-bank.com.tw/personal-banking/digital-finance/services/card/withdraw-overseas
-- 中信提款限額：https://service.ctbcbank.com/FAQ/Page01?kmid=10226
-- 中信金融卡額度：https://service.ctbcbank.com/FAQ/Page01?kmid=22820
-- 台新第三類提款公告：https://www.taishinbank.com.tw/TSB/personal/common/important-notice/TSBankImportantNotice-001359/
-- Firebase 登入：https://firebase.google.com/docs/auth/web/google-signin
-- Firebase Firestore Rules：https://firebase.google.com/docs/firestore/security/get-started
+PWA 安裝：
+- **iPhone**：Safari 開啟你的 Pages 網址 → 分享 → **加入主畫面**（若有「開啟為網頁 App」請啟用）。
+- **Android**：Chrome 開啟網址 → 選單 → **安裝應用程式**／**加到主畫面**。
+- 安裝後應能離線操作已快取的計算器；**Google 登入、App Check 及雲端同步需要網路**。iPhone PWA 的登入容器不一定與 Safari 分享登入狀態；若 PWA 無法彈出 Google 登入，需重新在支援的瀏覽器環境測試，這不是僅改 Secrets 可以解決的問題。
+- 部署更新後可能先看到舊版 Service Worker 快取畫面，重新關閉／開啟 PWA 並重新載入；**清除網站儲存資料前先備份 JSON**，否則本機交易紀錄可能被刪除。
 
-## 七、專案結構
+## 八、最後驗收清單
 
-```
-index.html              主要計算器與三銀行分頁
-login.html              Google 登入頁
-logout.html             Google 登出確認頁
-styles.css              RWD 樣式
-app.js                  交易、額度池、優惠、匯入匯出及離線邏輯
-firebase-sync.js        Firebase Authentication + Firestore 同步邏輯
-firebase-config.js      由使用者填入 Firebase 網頁應用程式公開設定
-firestore.rules         使用者 UID 隔離的 Firestore 安全規則
-manifest.webmanifest    PWA 安裝設定
-service-worker.js       本機資源離線快取
-assets/                 PWA app icon (SVG/PNG)
-.nojekyll               GitHub Pages 專案設定
-.gitignore              Git 排除規則
-README.md               安裝部署與額度規則
-```
+- [ ] GitHub Code 分頁**沒有**含實際值的 `firebase-config.js`，也沒有銀行備份。
+- [ ] GitHub Actions 的 `build` 和 `deploy` 都成功，網站為 HTTPS。
+- [ ] Firebase Auth 已啟用 Google；GitHub Pages 網域在 Authorized domains。
+- [ ] reCAPTCHA Enterprise 網站金鑰網域正確、已在 Firebase App Check Web App 註冊。
+- [ ] 首次登入後複製 Firebase Authentication UID，正式發布 owner-only Firestore Rules。
+- [ ] App Check SDK 取得 Token，Firestore 可以讀／寫自己的文件，其他 UID 被拒絕。
+- [ ] App Check Metrics 正常後才 Enforce Firestore，先不要 Enforce Auth。
+- [ ] 手機安裝 PWA，測試離線交易與回線同步，再匯出 JSON 備份。
 
-## v5.0 修正摘要（2026-11-23）
+## 九、主要檔案與程式變更
 
-- 原 v4 海外卡片容易令人以為有一份獨立的每日／每月提款上限；v5 改為國內／國外分項統計 + 每日共用上限，合庫跨提款與轉帳也反映在剩餘額度。
-- 合庫一般國際提款單筆由 30,000 修正為 20,000 元；台新第三類海外單筆由 50,000 修正為 20,000 元。
-- 保留現有 localStorage 儲存鍵、v3／v4 的 JSON 備份相容性，原有 Firebase/PWA 結構不變。
-- 說明來源：合庫 https://www.tcb-bank.com.tw/personal-banking/digital-finance/services/card/atm-card 及 https://www.tcb-bank.com.tw/personal-banking/digital-finance/services/card/withdraw-overseas；台新 https://www.taishinbank.com.tw/TSB/personal/deposit/debit-card/overseas-withdraw-cash-and-payment/TSBankGridPage-000054/；中信 https://service.ctbcbank.com/FAQ/Page01?kmid=10226。
+| 檔案 | 功能 |
+|---|---|
+| `.github/workflows/deploy-pages.yml` | GitHub Actions：從 Secrets 建置，部署 Pages |
+| `scripts/build-site.mjs` | 檢查 Firebase Web 設定一致性，只輸出公開靜態檔案到 `dist/` |
+| `.gitignore` | 阻止 `firebase-config.js`、`dist/`、`.env`、私鑰誤提交 |
+| `firebase-config.example.js` | 空白示例，不含真實 Firebase 值 |
+| `firebase-sync.js` | Google Popup 登入、App Check 初始化、Firestore 雲端同步與診斷 |
+| `firestore.rules` | UID 白名單，只允許特定 UID 的單一文件讀寫 |
+| `login.html` / `styles.css` | Google 登入失敗訊息與 App Check 狀態 |
+| `service-worker.js` | 新版離線快取；對 Firebase 設定使用網路優先策略 |
+| `index.html` | v6 版本標記，原三銀行頁面保留 |
+| `app.js` | 保留 v5.1 原本的三銀行額度計算，不更動交易規則 |
 
-## v5.1 Google 登入疑難排解（2026-11-23）
+**資料安全提示：** 前端 GitHub Pages 的 JavaScript 是公開的。本工具適合個人銀行額度手動計算，但不是銀行正式帳務系統，不保證交易額度為即時官方值；不要把完整銀行帳號、卡號、登入密碼或身分證資料放進交易備註或雲端。同步模型仍是一份 Firestore 文件，同時在兩台裝置離線編輯可能發生覆蓋，請定期備份 JSON。
 
-1. 網址必須是 `https://<github-username>.github.io/<repo>/login.html`；不要使用 `file://` 開啟。
-2. Firebase → Authentication → Sign-in method，確認 Google 已啟用，且選好支援電子郵件。
-3. Firebase → Authentication → Settings → Authorized domains，輸入 `<github-username>.github.io`；**不要**包含 `https://` 或儲存庫路徑。
-4. Firebase → Project settings → Your apps → Web App，重新複製 **該 Web App** 的設定值。`firebase-config.js` 必須是 `window.BANK_FIREBASE_CONFIG = {...};`。v5.1 會擋下例如「你的Firebase_apiKey」之類尚未替換的教學占位字。
-5. 到 GitHub 的 `firebase-config.js` 直接檢查是否更新成功；GitHub Pages 網址 `/firebase-config.js` 不應是空設定。**請勿將 API key、登入 Token、銀行帳號貼到公開 issue 或聊天。**
-6. Google 登入頁展開「無法登入？」可檢視站台、SDK 狀態和錯誤代碼，並複製**不含金鑰**的診斷資訊。
-7. 若 Google 登入成功，Firestore 卻提示 `permission-denied`，檢查是否已在 Firebase Console 的 Firestore → Rules 實際發布 `firestore.rules`；**不等於把檔案上傳到 GitHub**。
-8. GitHub Pages 更新後若仍是舊畫面，重新整理兩次、清除該網站的快取或 Service Worker；v5.1 已變更快取名稱。
-
-### 公開 Firebase 設定安全注意
-
-Firebase 官方把 Web App `apiKey`、`authDomain`、`projectId`、`appId` 設計為可公開的用戶端識別資訊，不是用來授權讀寫 Firestore 的秘密。保護資料必須靠 Firestore Security Rules；在 Google Cloud Credentials 也要確認該 API key 僅允許 Firebase 相關 API，避免被拿去呼叫不相干的計費 API。別把 Firebase Admin service account 私鑰、Google OAuth Client Secret、銀行密碼、交易 JSON 備份放在 GitHub。
-
-**僅限個人使用（進階，可選）**：登入成功後，在 Firebase Authentication → Users 複製自己的 UID，參考附檔 `firestore.owner-only.rules.example` 將 `PASTE_YOUR_UID` 替換成 UID，然後到 Firestore → Rules 發布。不要把 UID 寫成電子郵件，也不要把未替換的範例規則直接發布。Firebase 的 Authorized domains 只限制網站來源，**不限制哪些 Google 帳號可以登入**；限制使用者必須由規則負責。
-
-**注意：** v5.1 改進設定檢查與診斷，無法代替你在 Firebase Console 啟用 Google 登入、正確設定 Authorized domains 或部署 Firestore Rules。GitHub Pages 的 Google Popup 登入在手機 PWA 上仍可能受瀏覽器限制，先在桌面 Chrome 透過 HTTPS 測試。
+官方參考：
+- https://firebase.google.com/docs/projects/api-keys
+- https://firebase.google.com/docs/auth/web/google-signin
+- https://firebase.google.com/docs/auth/web/redirect-best-practices
+- https://firebase.google.com/docs/app-check/web/recaptcha-enterprise-provider
+- https://firebase.google.com/docs/app-check/enable-enforcement
+- https://firebase.google.com/docs/firestore/security/get-started
+- https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages

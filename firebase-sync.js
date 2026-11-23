@@ -3,10 +3,11 @@
  * 設計：未設定 Firebase 時，主計算器保持完全可用；登入後資料依 UID 隔離。
  * 同步採單一文件（users/{uid}/appData/calculator），以最後一筆成功提交為準。
  * 限制：同時在兩個裝置離線修改可能需要手動解決衝突；請定期備份 JSON。
- * 修改者：OpenAI｜日期：2026-11-23｜頁面：index/login/logout（v5.1 登入診斷）
+ * 修改者：OpenAI｜日期：2026-11-23｜頁面：index/login/logout（v6 安全部署 / App Check / 登入診斷）
  */
 
 const CONFIG = window.BANK_FIREBASE_CONFIG || {};
+const APP_CHECK_SITE_KEY = window.BANK_APP_CHECK_SITE_KEY || '';
 const view = document.body.dataset.view || 'app';
 const appStatus = document.getElementById('cloudStatus');
 const indicator = document.getElementById('cloudIndicator');
@@ -15,6 +16,7 @@ const signInButton = document.getElementById('googleSignIn');
 const signOutButton = document.getElementById('googleSignOut');
 const authMessage = document.getElementById('authMessage');
 const authDebugReport = document.getElementById('authDebugReport');
+const appCheckIndicator = document.getElementById('appCheckIndicator');
 const copyAuthDebug = document.getElementById('copyAuthDebug');
 let latestAuthErrorCode = '';
 let latestAuthCheck = '尚未檢查';
@@ -35,6 +37,14 @@ let unsubscribe = null;
 let appSdk = null;
 let authSdk = null;
 let firestoreSdk = null;
+let appCheckSdk = null;
+let appCheckState = '尚未初始化';
+
+function setAppCheckState(message) {
+  appCheckState = message;
+  if (appCheckIndicator) appCheckIndicator.textContent = `App Check：${message}`;
+  updateAuthDiagnostics();
+}
 
 function status(message, cls = '') {
   if (appStatus) appStatus.textContent = message;
@@ -49,13 +59,19 @@ function status(message, cls = '') {
 function validateConfig() {
   for (const key of ['apiKey', 'authDomain', 'projectId', 'appId']) {
     const value = CONFIG[key];
-    if (typeof value !== 'string' || !value.trim()) return `firebase-config.js 尚未填入 ${key}`;
+    if (typeof value !== 'string' || !value.trim()) return `GitHub Actions 未產生 Firebase 設定（缺少 ${key}）`;
     if (/^(你的|請填|YOUR_|REPLACE_|TODO|<|\{)/i.test(value.trim()) || value.includes('你的')) {
-      return `firebase-config.js 的 ${key} 仍是範例文字`;
+      return `GitHub Secrets 的 ${key} 仍是範例文字`;
     }
   }
   if (!CONFIG.authDomain.includes('.') || CONFIG.authDomain.includes('://') || CONFIG.authDomain.includes('/')) {
     return 'authDomain 格式錯誤：只能填入網域，不要包含 https:// 或路徑';
+  }
+  if (!/^1:(\d+):web:[a-f0-9]+$/i.test(CONFIG.appId) || CONFIG.appId.split(':')[1] !== CONFIG.messagingSenderId) {
+    return 'Firebase appId 與 messagingSenderId 不一致，請從同一個 Web App 重新複製（工作流程也會檢查）';
+  }
+  if (typeof APP_CHECK_SITE_KEY !== 'string' || !APP_CHECK_SITE_KEY.trim()) {
+    return 'GitHub Actions 尚未產生 App Check 網站金鑰，請檢查 Repository Secret';
   }
   if (/\s/.test(CONFIG.projectId) || /\s/.test(CONFIG.apiKey)) {
     return 'Firebase 設定值包含空白，請重新從 Firebase Console 複製';
@@ -72,6 +88,7 @@ function updateAuthDiagnostics() {
     `Firebase Web 設定：${latestAuthCheck}`,
     `Firebase 授權網域待確認：${location.hostname || '(尚未部署)'}`,
     `Google 登入：請確認 Authentication > Sign-in method > Google 已啟用`,
+    `App Check：${appCheckState}`,
     `最近錯誤代碼：${latestAuthErrorCode || '無'}`,
     '本診斷不包含 API Key、登入 Token 或銀行資料。'
   ].join('\n');
@@ -89,7 +106,7 @@ async function setup() {
   latestAuthCheck = configIssue || '已填寫必要欄位（尚未驗證是否正確）';
   updateAuthDiagnostics();
   if (configIssue) {
-    status(`${configIssue}；請到 GitHub 修改 firebase-config.js 後重新部署。`, 'warn');
+    status(`${configIssue}；請檢查 GitHub Repository Secrets，重新執行 Actions 部署。`, 'warn');
     if (signInButton) signInButton.disabled = true;
     if (signOutButton) signOutButton.disabled = true;
     return;
@@ -105,14 +122,36 @@ async function setup() {
   status('正在連線 Google 登入服務…');
   try {
     const version = '11.10.0';
-    [appSdk, authSdk, firestoreSdk] = await Promise.all([
+    [appSdk, authSdk, firestoreSdk, appCheckSdk] = await Promise.all([
       import(`https://www.gstatic.com/firebasejs/${version}/firebase-app.js`),
       import(`https://www.gstatic.com/firebasejs/${version}/firebase-auth.js`),
-      import(`https://www.gstatic.com/firebasejs/${version}/firebase-firestore.js`)
+      import(`https://www.gstatic.com/firebasejs/${version}/firebase-firestore.js`),
+      import(`https://www.gstatic.com/firebasejs/${version}/firebase-app-check.js`)
     ]);
     const firebaseApp = appSdk.initializeApp(CONFIG);
+    // Firebase App Check MUST initialize before accessing Firestore.
+    const appCheck = appCheckSdk.initializeAppCheck(firebaseApp, {
+      provider: new appCheckSdk.ReCaptchaEnterpriseProvider(APP_CHECK_SITE_KEY),
+      isTokenAutoRefreshEnabled: true
+    });
+    setAppCheckState('已啟用驗證，正在取得 Token…');
+    // Do not block the Google sign-in button while reCAPTCHA Enterprise responds.
+    // The provider is already installed, so Firebase requests will attach tokens.
+    void appCheckSdk.getToken(appCheck, false).then(() => {
+      setAppCheckState('有效 Token 已取得');
+    }).catch((error) => {
+      setAppCheckState('取得 Token 失敗，雲端同步可能被拒絕');
+      latestAuthErrorCode = error?.code || 'appcheck/token-failed';
+      updateAuthDiagnostics();
+    });
     firebaseAuth = authSdk.getAuth(firebaseApp);
     firebaseDb = firestoreSdk.getFirestore(firebaseApp);
+    try {
+      await authSdk.setPersistence(firebaseAuth, authSdk.browserLocalPersistence);
+    } catch {
+      // Safari privacy modes may disallow local persistence. Auth still attempts to work.
+      status('瀏覽器限制登入狀態儲存，請使用一般 Safari／Chrome 視窗登入。', 'warn');
+    }
     if (signInButton) signInButton.disabled = false;
     if (signOutButton) signOutButton.disabled = false;
     latestAuthCheck = 'Firebase SDK 初始化成功';
@@ -136,9 +175,11 @@ function friendlyError(error) {
   if (error?.code === 'auth/configuration-not-found') return '此 Firebase 專案尚未完成 Authentication 設定，請確認 Google 供應商已啟用';
   if (error?.code === 'auth/network-request-failed') return '網路連線失敗，請檢查網路或瀏覽器阻擋的請求';
   if (error?.code === 'auth/cancelled-popup-request') return '登入視窗請求被取消，請稍後重新點擊一次';
+  if (error?.code === 'auth/web-storage-unsupported') return '此瀏覽器禁止登入所需的儲存空間';
   if (error?.code === 'auth/invalid-app-credential') return 'Google 驗證憑證無效，請檢查 Web App 設定和已授權網域';
-  if (error?.code === 'permission-denied') return 'Firestore 安全規則拒絕存取，請部署 firestore.rules';
-  return error?.message || '未知錯誤';
+  if (error?.code === 'permission-denied') return 'Firestore 拒絕讀寫：請檢查 Rules 已發布、登入的 UID 是否為唯一白名單，並確認 App Check';
+  if (String(error?.code || '').startsWith('appCheck/') || String(error?.code || '').startsWith('app-check/')) return 'App Check 失敗：確認 reCAPTCHA Enterprise 金鑰的網域與 Firebase 註冊、是否已啟用強制驗證';
+  return error?.code ? `代碼：${error.code}` : '未知錯誤（可開啟登入診斷查看代碼）';
 }
 
 async function handleUserChange(user) {
@@ -252,11 +293,17 @@ if (signInButton) signInButton.addEventListener('click', async () => {
   if (!firebaseAuth) return;
   signInButton.disabled = true;
   try {
-    await authSdk.signInWithPopup(firebaseAuth, new authSdk.GoogleAuthProvider());
+    // Popup is the officially documented alternative for GitHub Pages to avoid
+    // redirect cross-origin storage issues in Safari/Chrome. Call directly on click.
+    const provider = new authSdk.GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: 'select_account' });
+    await authSdk.signInWithPopup(firebaseAuth, provider);
   } catch (error) {
     latestAuthErrorCode = error?.code || error?.name || 'unknown';
     updateAuthDiagnostics();
-    status(`登入失敗 [${latestAuthErrorCode}]：${friendlyError(error)}`, 'warn');
+    const extra = ['auth/popup-blocked','auth/popup-closed-by-user','auth/web-storage-unsupported'].includes(latestAuthErrorCode)
+      ? '請先在 Safari／Chrome 一般分頁登入、允許彈出視窗，再回到手機主畫面 App。' : '';
+    status(`登入失敗 [${latestAuthErrorCode}]：${friendlyError(error)}。${extra}`, 'warn');
   } finally { signInButton.disabled = false; }
 });
 

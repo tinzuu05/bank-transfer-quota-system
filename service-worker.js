@@ -1,5 +1,5 @@
 /** PWA: cache static local assets; never cache credentials or Firebase cloud requests. */
-const CACHE_NAME = 'three-bank-quota-v5-1-20261123';
+const CACHE_NAME = 'three-bank-quota-v6-secure-20261123';
 const ASSETS = [
   './', './index.html', './login.html', './logout.html', './styles.css',
   './app.js', './firebase-sync.js', './manifest.webmanifest',
@@ -15,7 +15,7 @@ self.addEventListener('fetch', (event) => {
   const request = event.request;
   const url = new URL(request.url);
   if (request.method !== 'GET' || url.origin !== self.location.origin) return;
-  // Firebase config 在重新部署後一律優先抓取最新值；離線時退回預設未設定模式。
+  // Generated Firebase config is fetched fresh. Offline fallback disables cloud only.
   if (url.pathname.endsWith('/firebase-config.js')) {
     event.respondWith(fetch(request).catch(() => new Response('window.BANK_FIREBASE_CONFIG = {};', { headers: { 'Content-Type': 'application/javascript' } })));
     return;

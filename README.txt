@@ -1,2 +1,4 @@
-三銀行額度管理 PWA v5.0
-請先閱讀 README.md。index.html 可本機開啟；Firebase Google 登入與 PWA 安裝需要設定 Firebase 並以 HTTPS 部署。
+三銀行額度計算器 v6 Security / PWA
+
+請先看 README.md（繁體中文）：GitHub Actions Secrets / App Check / UID 白名單 / PWA 全流程。
+此 ZIP 不包含你的 Firebase Web API Key、Google 登入憑證或銀行資料。
