@@ -1,0 +1,17 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 僅允許 Google 登入使用者存取本人資料，拒絕所有其他路徑。
+    match /users/{userId}/appData/{docId} {
+      allow read: if request.auth != null && request.auth.uid == userId && docId == 'calculator';
+      allow create, update: if request.auth != null
+        && request.auth.uid == userId
+        && docId == 'calculator'
+        && request.resource.data.keys().hasOnly(['payload', 'updatedAt'])
+        && request.resource.data.payload is map
+        && request.resource.data.payload.transactions is list
+        && request.resource.data.payload.transactions.size() <= 10000;
+      allow delete: if request.auth != null && request.auth.uid == userId && docId == 'calculator';
+    }
+  }
+}

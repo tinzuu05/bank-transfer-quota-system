@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#133c68">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="assets/icon-192.png">
+  <link rel="stylesheet" href="styles.css">
+  <script src="firebase-config.js" defer></script>
+  <script type="module" src="firebase-sync.js"></script>
+  <title>登出｜三銀行額度計算器</title>
+</head>
+<body data-view="logout">
+  <main class="shell auth-layout">
+    <header class="hero"><div class="eyebrow">PERSONAL BANKING / ACCOUNT</div><h1>安全<span>登出</span></h1><p>離開目前的 Google 登入工作階段。</p></header>
+    <section class="card" aria-labelledby="logoutTitle"><h2 id="logoutTitle">確認登出</h2>
+      <p class="secondary">登出後會清除本機儲存的計算器交易資料，避免其他使用這台裝置的人直接看到紀錄。<strong>請先確認雲端同步成功，或下載 JSON 備份。</strong></p>
+      <p id="authMessage" role="status">正在確認登入狀態…</p>
+      <div class="auth-actions"><button class="btn primary" id="googleSignOut" type="button">確認登出 Google</button><a class="btn secondary-btn" href="./index.html">返回計算器</a></div>
+    </section>
+  </main>
+</body>
+</html>

@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#133c68">
+  <meta name="description" content="三銀行額度計算器 Google 帳號登入">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="assets/icon-192.png">
+  <link rel="stylesheet" href="styles.css">
+  <script src="firebase-config.js" defer></script>
+  <script type="module" src="firebase-sync.js"></script>
+  <title>Google 登入｜三銀行額度計算器</title>
+</head>
+<body data-view="login">
+  <main class="shell auth-layout">
+    <header class="hero"><div class="eyebrow">PERSONAL BANKING / ACCOUNT</div><h1>Google <span>登入</span></h1><p>使用 Firebase Authentication，登入後可將交易紀錄備份到個人的 Firestore。</p></header>
+    <section class="card" aria-labelledby="loginTitle"><h2 id="loginTitle">歡迎使用</h2>
+      <p class="secondary">本工具不會要求銀行密碼或連接銀行帳戶。登入僅用來同步你手動輸入的資料。</p>
+      <p id="authMessage" role="status">正在確認登入狀態…</p>
+      <div class="auth-actions"><button class="btn primary" id="googleSignIn" type="button">使用 Google 帳號登入</button><a class="btn secondary-btn" href="./index.html">先使用本機模式</a></div>
+      <p class="secondary small">請先設定 Firebase 並開啟 Google 登入。登入必須在 HTTPS 或 localhost 網址進行，直接開啟 file:// 網頁不支援 Google 登入。</p>
+    </section>
+  </main>
+</body>
+</html>

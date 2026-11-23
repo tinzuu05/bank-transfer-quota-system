@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="description" content="合庫、中國信託、台新 Richart 三家銀行的提款、轉帳及跨轉優惠次數離線計算器。">
+  <title>三銀行額度管理</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#133c68">
+  <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="assets/icon-192.png">
+  <script src="firebase-config.js" defer></script>
+  <script src="app.js" defer></script>
+  <script type="module" src="firebase-sync.js"></script>
+</head>
+<body>
+  <main class="shell">
+    <header class="hero">
+      <div class="hero-copy">
+        <div class="eyebrow"><span class="dot"></span> PERSONAL BANKING / PWA · FIREBASE READY</div>
+        <h1>轉帳額度 <span>計算器</span></h1>
+        <p>提款、轉帳與每月免費跨轉次數，三家銀行分開管理。</p>
+      </div>
+    </header>
+
+    <section class="auth-bar" aria-label="登入與同步">
+      <div class="auth-status"><span id="cloudIndicator" class="status-dot"></span><span id="cloudStatus">離線本機模式 · 未連接 Firebase</span></div>
+      <div class="button-row"><button class="btn secondary-btn" id="cloudDownload" type="button" hidden>下載雲端資料</button><button class="btn secondary-btn" id="cloudUpload" type="button" hidden>上傳本機資料</button><a class="btn secondary-btn" id="accountLink" href="login.html">Google 登入</a><button class="btn primary" id="installPwa" type="button" hidden>安裝到手機／桌面</button></div>
+    </section>
+
+    <section class="tabs-wrap" aria-label="選擇轉出銀行">
+      <div class="bank-tabs" role="tablist" aria-label="三家銀行分頁">
+        <button id="tab-tcb" type="button" class="bank-tab" role="tab" aria-selected="true" aria-controls="bank-panel" data-bank="tcb"><span class="tab-symbol">合</span><span class="tab-text"><strong>合作金庫</strong><small>第三類數位帳戶</small></span></button>
+        <button id="tab-ctbc" type="button" class="bank-tab" role="tab" aria-selected="false" aria-controls="bank-panel" data-bank="ctbc"><span class="tab-symbol">中</span><span class="tab-text"><strong>中國信託</strong><small>一般存款帳戶</small></span></button>
+        <button id="tab-taishin" type="button" class="bank-tab" role="tab" aria-selected="false" aria-controls="bank-panel" data-bank="taishin"><span class="tab-symbol">台</span><span class="tab-text"><strong>台新銀行</strong><small>Richart 第三類數位帳戶</small></span></button>
+      </div>
+    </section>
+
+    <div id="bank-panel" role="tabpanel" aria-labelledby="tab-tcb" tabindex="0">
+      <section class="panel-head">
+        <div><div class="eyebrow" id="bankTag">TAIWAN COOPERATIVE BANK</div><h2 id="bankName">合作金庫</h2><p id="bankDescription" class="secondary">第三類數位存款帳戶</p></div>
+        <div class="period-controls"><label class="field"><span>查看月份</span><input id="viewMonth" type="month"></label><label class="field"><span>查詢日期</span><input id="inspectDate" type="date"></label></div>
+      </section>
+      <div class="notice" id="bankNotice"></div>
+      <div id="legacyWarning" class="notice warning" hidden>已匯入舊版合庫紀錄。少數舊交易無法判定確切提款通路／收款帳戶或特殊額度，請檢查並重新分類；紀錄不會自動刪除。</div>
+
+      <section class="metrics" aria-label="額度摘要">
+        <article class="metric feature"><div class="metric-head"><span id="mainMetricTitle">主要額度</span> <span id="mainMetricLabel">本月剩餘</span></div><strong id="mainRemaining">—</strong><div class="progress"><span id="mainProgress"></span></div><p id="mainDetail"></p></article>
+        <article class="metric"><div class="metric-head">今日剩餘額度</div><strong id="dailyRemaining">—</strong><p id="dailyDetail"></p></article>
+        <article class="metric"><div class="metric-head">本月免費跨行轉帳</div><strong id="freeTransferRemaining">—</strong><p id="freeTransferDetail"></p></article>
+        <article class="metric"><div class="metric-head">本月免費跨行提款</div><strong id="freeWithdrawRemaining">—</strong><p id="freeWithdrawDetail"></p></article>
+      </section>
+
+      <section class="atm-overview card" aria-label="國內外 ATM 提款額度總覽">
+        <div class="section-title atm-section-head"><div><span class="section-kicker">ATM WITHDRAWALS</span><h3>ATM 提款總覽</h3><p class="secondary small">國內、國外分開記錄；每日提款上限合併計算，並不是兩份額度。</p></div><span class="mini-badge">均為新臺幣等值</span></div>
+        <div class="atm-split">
+          <article class="atm-pane domestic-pane">
+            <div class="atm-pane-head"><span class="atm-flag" aria-hidden="true">🏠</span><h4>國內 ATM 提款</h4></div>
+            <div class="atm-number-row"><span>查詢日提款</span><strong id="domesticDayUsed">—</strong></div>
+            <div class="atm-number-row"><span>本月累計提款</span><strong id="domesticMonthUsed">—</strong></div>
+            <p>僅統計本行與其他銀行的國內 ATM 提款。</p>
+          </article>
+          <article class="atm-pane overseas-pane">
+            <div class="atm-pane-head"><span class="atm-flag" aria-hidden="true">✈</span><h4>國外 ATM 提款</h4></div>
+            <div class="atm-number-row"><span>查詢日提款</span><strong id="overseasDayUsed">—</strong></div>
+            <div class="atm-number-row"><span>本月累計提款</span><strong id="overseasMonthUsed">—</strong></div>
+            <p id="overseasCount">海外提款還可能受到當地 ATM 及卡片功能限制。</p>
+          </article>
+        </div>
+        <div class="atm-shared" role="group" aria-label="提款共用每日額度">
+          <div class="atm-shared-title"><span>國內＋國外提款的共用每日上限</span><strong id="withdrawDailyLimit">—</strong></div>
+          <div class="atm-shared-stats"><div><small>當日已用（國內＋國外）</small><strong id="withdrawDailyUsed">—</strong></div><div><small>當日剩餘可提款</small><strong id="withdrawDailyRemain">—</strong></div></div>
+          <div class="progress atm-progress" aria-hidden="true"><span id="withdrawProgress"></span></div>
+          <p id="withdrawDetailHint" class="atm-hint"></p>
+        </div>
+        <div class="atm-month-notice" id="withdrawMonthNotice"></div>
+      </section>
+
+      <div class="layout-two">
+        <section class="card form-card" aria-labelledby="formTitle">
+          <div class="section-title"><div><span class="section-kicker">NEW ENTRY</span><h3 id="formTitle">新增一筆交易</h3></div><span class="mini-badge" id="formBankLabel">合庫</span></div>
+          <form id="transactionForm" novalidate>
+            <div class="form-grid"><label class="field"><span>交易日期</span><input id="txDate" type="date" required></label><label class="field"><span>交易類型</span><select id="txType" required></select></label></div>
+            <label class="field"><span>交易金額（新臺幣元）</span><input id="txAmount" type="number" min="1" max="999999999" step="1" placeholder="例如：50000" required></label>
+            <p id="txLimitHint" class="limit-hint" aria-live="polite"></p>
+            <label class="check-row" id="crossBankRow"><input id="txCrossBank" type="checkbox"><span>這是<strong>跨行</strong>轉帳／提款（可能計入跨行優惠次數）</span></label>
+            <label class="check-row" id="exemptRow"><input id="txExempt" type="checkbox"><span>這筆享有其他免手續費方案，不扣本工具的免費次數</span></label>
+            <label class="field"><span>備註（選填）</span><input id="txNote" type="text" maxlength="120" placeholder="例如：轉帳到永豐證券交割戶"></label>
+            <p id="formError" class="error" role="alert" hidden></p>
+            <div class="button-row"><button type="submit" id="saveTx" class="btn primary">新增交易</button><button type="button" id="cancelEdit" class="btn secondary-btn" hidden>取消編輯</button></div>
+          </form>
+        </section>
+
+        <section class="card details-card">
+          <div class="section-title"><div><span class="section-kicker">AVAILABLE LIMITS</span><h3>額度使用明細</h3></div></div>
+          <p class="secondary small">依選定月份及查詢日期計算，並非銀行即時餘額。</p>
+          <div id="poolBreakdown" class="pool-list"></div>
+          <div class="info-box" id="feeNote"></div>
+        </section>
+      </div>
+
+      <details class="card settings" id="settingsPanel">
+        <summary><span><span class="section-kicker">PREFERENCES</span><strong>額度與免費次數設定</strong></span><span class="chevron">⌄</span></summary>
+        <p class="secondary small settings-desc">各銀行設定獨立儲存。可依銀行核准、薪轉身分及實際優惠調整；金額超過標準額度時需自行確認。</p>
+        <div class="settings-grid">
+          <label class="field"><span>每月免費跨行轉帳（次）</span><input type="number" id="freeTransferLimit" min="0" max="1000" step="1"></label>
+          <label class="field"><span>每月免費跨行提款（次）</span><input type="number" id="freeWithdrawLimit" min="0" max="1000" step="1"></label>
+          <label class="field"><span>本月尚未記錄的已用跨轉優惠（次）</span><input type="number" id="manualFreeTransfers" min="0" max="1000" step="1"></label>
+          <label class="field"><span>本月尚未記錄的已用跨提優惠（次）</span><input type="number" id="manualFreeWithdrawals" min="0" max="1000" step="1"></label>
+        </div>
+        <div class="switch-section" id="bankToggles"></div>
+        <div class="subhead">各類型單筆上限 <small>金額單位：元</small></div>
+        <div id="typeLimitSettings" class="settings-grid"></div>
+        <div class="subhead">每日／每月上限 <small>同類別交易合併計算</small></div>
+        <div id="poolLimitSettings" class="settings-grid"></div>
+        <p id="settingsWarning" class="hint"></p>
+        <div class="button-row"><button class="btn secondary-btn" id="restoreDefaults" type="button">恢復此銀行的預設額度</button></div>
+      </details>
+
+      <section class="card records">
+        <div class="records-header"><div><span class="section-kicker">TRANSACTION LOG</span><h3>交易紀錄 <span id="recordCount" class="record-count">0 筆</span></h3><p class="secondary small">僅顯示目前銀行、目前月份。改月份不會清除其他紀錄。</p></div><div class="button-row"><button class="btn secondary-btn" id="downloadCsv" type="button">匯出 CSV</button><button class="btn danger-btn" id="clearMonth" type="button">清空本月紀錄</button></div></div>
+        <div class="table-wrap"><table><thead><tr><th>日期</th><th>交易類型</th><th>金額</th><th>跨行優惠</th><th>備註</th><th>操作</th></tr></thead><tbody id="transactionsBody"></tbody></table></div>
+        <p class="empty" id="emptyState" hidden>本月尚未記錄交易。新增一筆，剩餘額度便會自動更新。</p>
+      </section>
+    </div>
+
+    <section class="footer-tools"><div><strong>資料備份與還原</strong><p>離線時資料先儲存於此瀏覽器；設定 Firebase 並登入後可同步到個人雲端。仍建議定期匯出 JSON。</p></div><div class="button-row"><button class="btn secondary-btn" id="downloadBackup" type="button">備份全部 JSON</button><button class="btn secondary-btn" id="loadBackup" type="button">還原 JSON</button><input id="backupFile" type="file" accept=".json,application/json" hidden></div></section>
+    <footer>此工具為私人離線試算，不連接任何銀行，也不進行轉帳。免費次數僅依已記錄交易推算，可能受到帳戶等級、轉帳管道、當月活動和其他優惠影響。<br>參考銀行官方資訊：<a href="https://www.tcb-bank.com.tw/personal-banking/deposit-exchange/twd-services/digital-demand-deposit/promotion-01" target="_blank" rel="noopener noreferrer">合庫 2026 優惠</a> · <a href="https://service.ctbcbank.com/FAQ/Page01?kmid=8269" target="_blank" rel="noopener noreferrer">中信非約轉限額</a> · <a href="https://richart.tw/TSDIB_RichartWeb/ntd-saving-currency?openpage=savingaccount" target="_blank" rel="noopener noreferrer">台新 Richart 優惠</a> · <a href="https://web.taishinbank.com.tw/TSB/customer-service-center/qa/index.html?nav1=type03" target="_blank" rel="noopener noreferrer">台新轉帳限額</a>。</footer>
+    <p class="legal-note">提醒：國內與海外 ATM 每日提款額度共用，並非各有一份。海外手續費及當地 ATM 限額不包含在本工具；此工具不會讀取銀行帳戶、密碼或執行任何交易。</p>
+  </main>
+</body>
+</html>
