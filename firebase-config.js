@@ -4,9 +4,9 @@
  * 請勿填寫 Google 密碼、私人金鑰、服務帳戶 JSON。
  */
 window.BANK_FIREBASE_CONFIG = {
-  apiKey: '',
-  authDomain: '',
-  projectId: '',
-  appId: '',
-  messagingSenderId: ''
+  apiKey: 'AIzaSyBWx3JWCC4opG32bLK8iYtBEQGv9uvQxGM',
+  authDomain: 'bank-transfer-quota-system.firebaseapp.com',
+  projectId: 'bank-transfer-quota-system',
+  appId: '1:585157937840:web:1332ed0af815e8c5e5c975',
+  messagingSenderId: '585157937840'
 };
