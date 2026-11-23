@@ -1,6 +1,3 @@
-// 進階選用：個人專用。先在 Firebase Authentication > Users 找到自己的 UID。
-// 先將 PASTE_YOUR_UID 改成你自己的 Firebase Auth UID 才可以發布。
-// 此檔不會自動部署；請在 Firestore Console > Rules 貼上並 Publish。
 rules_version = '2';
 
 service cloud.firestore {
